@@ -2,26 +2,31 @@ package com.camerax.presentation.camera
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Bundle
 import android.util.Log
-import androidx.camera.core.CameraSelector
-import androidx.camera.core.Preview
+import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import androidx.core.os.ConfigurationCompat
 import com.camerax.R
 import com.camerax.presentation.base.BaseActivity
 import com.camerax.utils.toast
 import kotlinx.android.synthetic.main.activity_camera.*
+import java.io.File
 
 class CameraActivity : BaseActivity() {
 
     val PERM_CAMERA = Manifest.permission.CAMERA
+    private var mImageCapture: ImageCapture? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_camera)
+
+        previewView.setOnClickListener {
+            takePhoto()
+        }
     }
 
     override fun onStart() {
@@ -70,6 +75,7 @@ class CameraActivity : BaseActivity() {
         val runnable = Runnable {
             val cameraProvider = cameraProviderFuture.get()
 
+            // Preview use case
             val preview = Preview.Builder()
                 .build()
                 .also {
@@ -78,10 +84,13 @@ class CameraActivity : BaseActivity() {
 
             val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
 
+            // Image Capture use case
+            mImageCapture = ImageCapture.Builder().build()
+
             try {
                 cameraProvider.unbindAll()
 
-                cameraProvider.bindToLifecycle(this, cameraSelector, preview)
+                cameraProvider.bindToLifecycle(this, cameraSelector, preview, mImageCapture)
             } catch (ex: Exception) {
                 Log.e("Camera", ex.toString())
             }
@@ -89,6 +98,32 @@ class CameraActivity : BaseActivity() {
 
         cameraProviderFuture.addListener(runnable, cameraExecutor)
 
+    }
+
+    private fun takePhoto() {
+        val imageCapture = mImageCapture ?: return
+
+        val photoFile = File(
+            filesDir,
+            "TestImage.jpg"
+        )
+
+        val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
+        val callback = object : ImageCapture.OnImageSavedCallback {
+            override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
+                val uri = Uri.fromFile(photoFile)
+                val message = "Captured: $uri"
+                toast(message)
+                Log.i("Capture", message)
+            }
+
+            override fun onError(exception: ImageCaptureException) {
+                Log.e("Capture", exception.toString())
+                exception.printStackTrace()
+            }
+        }
+
+        imageCapture.takePicture(outputOptions, ContextCompat.getMainExecutor(this), callback)
     }
 
     private fun requestCameraPermission() {
